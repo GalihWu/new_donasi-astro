@@ -1,0 +1,683 @@
+---
+export const prerender = false;
+
+import MainLayout from "@/layouts/MainLayout.astro";
+import Header from "@/components/layouts/Header.astro";
+import { formatRupiah, getInitialName } from "@/lib/formatter";
+import { getServerToken } from "@/lib/auth";
+
+import PaymentMethodModal from "@/components/ui/PaymentMethod.astro";
+import { getPaymentMethod, getUserProfile } from "@/lib/FetchData";
+
+
+interface EventDetail {
+  id: string;
+  title: string;
+  image: string;
+  datetime: string;
+  price: string;
+  mode: string;
+  link: string;
+  type: { name: string };
+  reg_only: number | null;
+}
+
+interface User {
+  name: string;
+  phone: string;
+  email?: string;
+}
+
+const { slug } = Astro.params;
+if (!slug) return Astro.redirect("/");
+
+const token = getServerToken(Astro.cookies);
+const API_URL = import.meta.env.ASTRO_API_URL;
+
+const baseHeaders = {
+  Accept: "application/json",
+  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+};
+
+const fetchEvent = async (): Promise<EventDetail | null> => {
+  try {
+    const res = await fetch(`${API_URL}/event/link/${slug}`, { headers: baseHeaders });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.data ?? null;
+  } catch { return null; }
+};
+
+
+
+const [eventData, user, allPaymentMethods] = await Promise.all([
+  fetchEvent(),
+ token ? getUserProfile(token) : Promise.resolve(null),
+  getPaymentMethod(slug),
+]);
+
+const account = user?.data ?? null;
+const walletBal = (account?.dompet_kebaikan?.saldo ?? 0) as number;
+
+if (!eventData) return Astro.redirect(`/event/${slug}`);
+
+// Filter payment method di server (VA & bank)
+const rawPm: any[] = allPaymentMethods?.data ?? [];
+const paymentMethods = rawPm.filter(
+  (pm:any) => pm.type === "VA" || pm.type === "bank",
+);
+
+const isLoggedIn = !!account;
+const regOnly = eventData.reg_only ?? 0;
+const isRegOnly = regOnly !== 0;
+const priceNum = Number(eventData.price) || 0;
+const isFree = priceNum === 0;
+
+const dateInfo = new Date(eventData.datetime).toLocaleDateString("id-ID", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+const typeInfo = `${eventData.type.name} ${eventData.mode}`;
+
+const headerText = isRegOnly
+  ? "Selesaikan Pendaftaran Anda"
+  : "Selesaikan Pembayaran Anda";
+const submitText = isRegOnly ? "Lanjutkan Pendaftaran" : "Lanjutkan Pembayaran";
+
+---
+
+<MainLayout title={headerText} description={eventData.title}>
+  <Header type="notshare" text={headerText} link={`/event/${slug}`} />
+
+  <main 
+   
+    class="min-h-screen bg-linear-to-br from-slate-50 to-primary-100 pt-16 pb-32">
+    <div class="container py-4 space-y-4">
+      <!-- User Info -->
+      {isLoggedIn ? (
+        <div class="bg-white rounded border border-gray-100 shadow-sm p-4 flex gap-3 items-center">
+          <div class="w-12 h-12 rounded-full bg-primary-500 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+            {getInitialName(account!.name)}
+          </div>
+          <div class="min-w-0">
+            <p class="font-semibold text-sm text-gray-900 truncate">{account!.name}</p>
+            <p class="text-xs text-gray-500 truncate">{account!.phone}</p>
+          </div>
+        </div>
+      ) : (
+        <div class="bg-white rounded border border-gray-100 shadow-sm p-4 space-y-3">
+          <p class="text-sm text-gray-600 text-center">
+            Silakan
+            <a href="/auth/login" class="text-primary-500 font-semibold hover:underline">Login</a>
+            atau lengkapi data berikut
+          </p>
+          <div>
+            <label for="input-name" class="text-[11px] text-gray-400 mb-1.5 block">
+              Nama Lengkap
+            </label>
+            <input
+              id="input-name"
+              name="name"
+              type="text"
+              placeholder="Masukkan nama lengkap"
+              class="w-full border border-gray-200 rounded-lg py-2.5 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent transition-all"
+            />
+          </div>
+          <div>
+            <label for="input-phone" class="text-[11px] text-gray-400 mb-1.5 block">
+              Nomor WhatsApp
+            </label>
+            <input
+              id="input-phone"
+              name="phone"
+              type="tel"
+              inputmode="numeric"
+              placeholder="08xxxxxxxxxx"
+              class="w-full border border-gray-200 rounded-lg py-2.5 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent transition-all"
+            />
+          </div>
+          {!isRegOnly && (
+            <div>
+              <label for="input-email" class="text-[11px] text-gray-400 mb-1.5 block">
+                Email <span class="text-gray-300">(opsional)</span>
+              </label>
+              <input
+                id="input-email"
+                name="email"
+                type="email"
+                placeholder="email@example.com"
+                class="w-full border border-gray-200 rounded-lg py-2.5 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent transition-all"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {!isRegOnly && (
+        <>
+          <!-- Ticket Summary -->
+          <div class="bg-white rounded border border-gray-100 shadow-sm p-4">
+            <div class="flex items-center gap-2 mb-3 pb-3 border-b border-dashed border-gray-300">
+              <div class="w-9 h-9 rounded-lg bg-primary-50 text-primary-500 flex items-center justify-center flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 0 1 0 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a2.999 2.999 0 0 1 0-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375Z" />
+                </svg>
+              </div>
+              <h3 id="ticket-section-title" class="font-semibold text-sm text-gray-900">
+                {isFree ? "Tiket Pendaftaran Gratis" : "Pembayaran Tiket Pendaftaran"}
+              </h3>
+            </div>
+            <div class="grid grid-cols-3 gap-2 pb-3 border-b border-dashed border-gray-300">
+              <div class="text-center">
+                <p class="text-[11px] text-gray-400 mb-1">Tiket</p>
+                <p id="summary-qty" class="text-sm font-semibold text-gray-900">1</p>
+              </div>
+              <div class="text-center">
+                <p class="text-[11px] text-gray-400 mb-1">Tipe</p>
+                <p class="text-sm font-semibold text-gray-900 truncate">{typeInfo}</p>
+              </div>
+              <div class="text-center">
+                <p class="text-[11px] text-gray-400 mb-1">Harga</p>
+                <p class="text-sm font-semibold text-gray-900">{formatRupiah(priceNum)}</p>
+              </div>
+            </div>
+            <div class="flex justify-between items-center pt-3">
+              <p class="text-sm font-medium text-gray-700">Total Bayar</p>
+              <p id="summary-total-bayar" class="text-lg font-bold text-primary-500">
+                {formatRupiah(priceNum)}
+              </p>
+            </div>
+          </div>
+
+          <!-- Infaq -->
+          <div class="bg-white rounded border border-gray-100 shadow-sm p-4">
+            <label for="input-infaq" class="block font-semibold text-sm text-gray-900 mb-1">
+              Tambah Infaq Seikhlasnya
+            </label>
+            <p class="text-[11px] text-gray-400 mb-3">Opsional, untuk kebaikan tambahan</p>
+            <div class="relative mb-3">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-medium">Rp</span>
+              <input
+                id="input-infaq"
+                type="text"
+                inputmode="numeric"
+                placeholder="Masukkan nominal"
+                class="w-full pl-10 pr-3 border border-gray-200 rounded-lg py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent transition-all"
+              />
+            </div>
+            <div class="grid grid-cols-4 gap-2">
+              {[10000, 25000, 50000, 100000].map((amount) => (
+                <button
+                  type="button"
+                  class="quick-amount py-2 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:border-primary-400 hover:text-primary-500 active:scale-[0.98] transition-all"
+                  data-amount={String(amount)}
+                >
+                  {formatRupiah(amount)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <!-- Payment Method -->
+          <div class="bg-white rounded border border-gray-100 shadow-sm p-4">
+            <p class="text-xs font-semibold text-gray-500 mb-3">METODE PEMBAYARAN</p>
+            <button
+                id="open-payment-modal"
+                type="button"
+                class="w-full flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3.5 hover:border-primary-400 hover:bg-primary-50/50 transition-all duration-150 group"
+                >
+                <div class="flex items-center gap-3 min-w-0">
+                    <img
+                    id="payment-img"
+                    src=""
+                    alt=""
+                    width="64"
+                    height="32"
+                    class="h-7 w-auto object-contain hidden shrink-0"
+                    />
+                    <span id="payment-name" class="text-sm text-gray-400 truncate">
+                    Pilih metode pembayaran
+                    </span>
+                </div>
+                <span
+                    class="text-xs text-primary-600 font-semibold border border-primary-200 bg-primary-50 group-hover:bg-primary-100 rounded-lg px-3 py-1.5 shrink-0 ml-2 transition-colors"
+                >
+                    Pilih
+                </span>
+            </button>
+
+            <!-- Voucher -->
+            <div class="mt-4">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  id="voucher-toggle"
+                  type="checkbox"
+                  class="w-4 h-4 accent-primary-500"
+                />
+                <span class="text-sm font-medium text-gray-700">Punya Kode Voucher?</span>
+              </label>
+              <div id="voucher-input-wrapper" class="hidden mt-3 space-y-2">
+                <div class="flex gap-2">
+                  <input
+                    id="input-discount-code"
+                    type="text"
+                    placeholder="Masukkan kode voucher"
+                    class="flex-1 border border-gray-200 rounded-lg py-2.5 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent transition-all"
+                  />
+                  <button
+                    id="apply-discount"
+                    type="button"
+                    class="px-4 bg-primary-500 hover:bg-primary-600 active:scale-[0.98] text-white text-sm font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Pakai
+                  </button>
+                </div>
+                <div id="discount-applied" class="hidden gap-2 items-start p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                  <p id="discount-applied-text" class="text-xs text-gray-700 leading-relaxed"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Order Summary -->
+          <div class="bg-white rounded border border-gray-100 shadow-sm p-4">
+            <p class="text-xs font-semibold text-gray-500 mb-3">KONFIRMASI PEMESANAN</p>
+            <div class="flex gap-3 p-3 bg-gray-50 rounded-lg mb-3">
+              <img
+                src={eventData.image}
+                alt={eventData.title}
+                width="80"
+                height="80"
+                loading="lazy"
+                decoding="async"
+                class="rounded-lg object-cover w-20 h-20 flex-shrink-0"
+              />
+              <div class="flex-1 min-w-0">
+                <p class="font-semibold text-sm text-gray-900 mb-1.5 line-clamp-2">
+                  {eventData.title}
+                </p>
+                <div class="flex items-center gap-1.5 text-[11px] text-gray-500 mb-0.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 text-primary-500 flex-shrink-0">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                  <span class="truncate">{dateInfo}</span>
+                </div>
+                <div class="flex items-center gap-1.5 text-[11px] text-gray-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 text-primary-500 flex-shrink-0">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
+                  </svg>
+                  <span class="truncate">{typeInfo}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-2 py-3 border-y border-gray-100">
+              <div class="flex justify-between text-sm">
+                <span class="text-gray-600">Subtotal</span>
+                <span id="summary-subtotal" class="font-semibold text-gray-900">
+                  {formatRupiah(priceNum)}
+                </span>
+              </div>
+              <div id="summary-discount-row" class="hidden justify-between text-sm text-green-600">
+                <span class="font-medium">Diskon</span>
+                <span id="summary-discount-value" class="font-semibold">-Rp 0</span>
+              </div>
+              <div id="summary-infaq-row" class="hidden justify-between text-sm">
+                <span class="text-gray-600">Infaq Seikhlasnya</span>
+                <span id="summary-infaq-value" class="font-semibold text-gray-900">Rp 0</span>
+              </div>
+            </div>
+            <div class="flex justify-between items-center mt-3">
+              <p class="text-sm font-bold text-gray-900">Total Bayar</p>
+              <p id="summary-final-price" class="text-lg font-bold text-primary-500">
+                {formatRupiah(priceNum)}
+              </p>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  </main>
+
+  <PaymentMethodModal paymentMethods={paymentMethods} />
+
+
+  <!-- Sticky Submit -->
+  <div class="container fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 px-4 py-4">
+      <button
+        id="submit-btn"
+        type="button"
+        class="w-full bg-primary-500 hover:bg-primary-600 active:scale-[0.98] text-white font-semibold py-3 rounded-lg transition-all duration-150 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+      >
+        <span id="submit-btn-label">{submitText}</span>
+      </button>
+  </div>
+
+  <!-- Data bridge -->
+  <div
+    class="hidden"
+    data-form-config
+    data-slug={slug}
+    data-api-url={API_URL}
+    data-event-id={eventData.id}
+    data-event-price={String(priceNum)}
+    data-is-reg-only={String(isRegOnly)}
+    data-is-logged-in={String(isLoggedIn)}
+    data-user-name={account?.name ?? ""}
+    data-user-phone={account?.phone ?? ""}
+    data-user-email={account?.email ?? ""}
+    data-submit-text={submitText}
+  ></div>
+</MainLayout>
+
+<script>
+  import { getToken } from "@/lib/auth";
+  import { showToast } from "@/lib/toast";
+  import { formatRupiah } from "@/lib/formatter";
+
+  interface DiscountData {
+    id: string;
+    name: string;
+    discount: string;
+    type: "nominal" | "percentage";
+    max_discount?: string;
+    min_purchase?: string;
+  }
+
+  const config = document.querySelector("[data-form-config]") as HTMLElement | null;
+  if (config) {
+    const {
+      slug = "",
+      apiUrl = "",
+      eventId = "",
+      eventPrice = "0",
+      isRegOnly = "false",
+      isLoggedIn = "false",
+      userName = "",
+      userPhone = "",
+      userEmail = "",
+      submitText = "Lanjutkan",
+    } = config.dataset;
+
+    const priceNum = Number(eventPrice) || 0;
+    const isRegOnlyFlag = isRegOnly === "true";
+    const isLoggedInFlag = isLoggedIn === "true";
+
+    // State (initialized from sessionStorage if available)
+    let qty = 1;
+    let totalPrice = priceNum;
+    let infaq = 0;
+    let paymentMethodId = isRegOnlyFlag ? "1" : "";
+    let discountData: DiscountData | null = null;
+    let isSubmitting = false;
+    let paymentType = "";
+    let paymentSelected = false;
+
+    try {
+      const raw = sessionStorage.getItem("eventFormData");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        qty = Number(parsed.qty) || 1;
+        totalPrice = Number(parsed.totalPrice) || priceNum;
+      }
+    } catch {}
+
+    // Elements
+    const summaryQty = document.getElementById("summary-qty");
+    const summaryTotalBayar = document.getElementById("summary-total-bayar");
+    const summarySubtotal = document.getElementById("summary-subtotal");
+    const summaryFinalPrice = document.getElementById("summary-final-price");
+    const summaryDiscountRow = document.getElementById("summary-discount-row");
+    const summaryDiscountValue = document.getElementById("summary-discount-value");
+    const summaryInfaqRow = document.getElementById("summary-infaq-row");
+    const summaryInfaqValue = document.getElementById("summary-infaq-value");
+    const ticketSectionTitle = document.getElementById("ticket-section-title");
+
+    const inputInfaq = document.getElementById("input-infaq") as HTMLInputElement | null;
+    const quickAmounts = document.querySelectorAll<HTMLButtonElement>(".quick-amount");
+
+    const voucherToggle = document.getElementById("voucher-toggle") as HTMLInputElement | null;
+    const voucherWrapper = document.getElementById("voucher-input-wrapper");
+    const inputDiscountCode = document.getElementById("input-discount-code") as HTMLInputElement | null;
+    const applyDiscountBtn = document.getElementById("apply-discount") as HTMLButtonElement | null;
+    const discountApplied = document.getElementById("discount-applied");
+    const discountAppliedText = document.getElementById("discount-applied-text");
+
+    const openModalBtn = document.getElementById(
+        "open-payment-modal",
+    ) as HTMLButtonElement;
+    const paymentImg = document.getElementById("payment-img") as HTMLImageElement;
+    const paymentNameEl = document.getElementById("payment-name") as HTMLElement;
+    const walletInfo = document.getElementById("wallet-info") as HTMLElement;
+    
+
+    const submitBtn = document.getElementById("submit-btn") as HTMLButtonElement | null;
+    const submitBtnLabel = document.getElementById("submit-btn-label");
+
+    const inputName = document.getElementById("input-name") as HTMLInputElement | null;
+    const inputPhone = document.getElementById("input-phone") as HTMLInputElement | null;
+    const inputEmail = document.getElementById("input-email") as HTMLInputElement | null;
+
+    // Initial display sync (qty/totalPrice from sessionStorage)
+    if (summaryQty) summaryQty.textContent = String(qty);
+    if (summaryTotalBayar) summaryTotalBayar.textContent = formatRupiah(totalPrice);
+    if (summarySubtotal) summarySubtotal.textContent = formatRupiah(totalPrice);
+    if (summaryFinalPrice) summaryFinalPrice.textContent = formatRupiah(totalPrice);
+    if (ticketSectionTitle && totalPrice === 0) {
+      ticketSectionTitle.textContent = "Tiket Pendaftaran Gratis";
+    }
+
+    const computeDiscountAmount = (): number => {
+      if (!discountData) return 0;
+      if (discountData.type === "percentage") {
+        const amount = (totalPrice * Number(discountData.discount)) / 100;
+        const max = discountData.max_discount
+          ? Number(discountData.max_discount)
+          : Infinity;
+        return Math.min(amount, max);
+      }
+      return Number(discountData.discount);
+    };
+
+    const updateSummary = () => {
+      const discountAmount = computeDiscountAmount();
+      const final = Math.max(totalPrice - discountAmount, 0) + infaq;
+
+      if (summaryFinalPrice) summaryFinalPrice.textContent = formatRupiah(final);
+
+      if (discountData && summaryDiscountRow && summaryDiscountValue) {
+        summaryDiscountRow.classList.remove("hidden");
+        summaryDiscountRow.classList.add("flex");
+        summaryDiscountValue.textContent =
+          discountData.type === "percentage"
+            ? `-${Number(discountData.discount)}%`
+            : `-${formatRupiah(Number(discountData.discount))}`;
+      } else if (summaryDiscountRow) {
+        summaryDiscountRow.classList.add("hidden");
+        summaryDiscountRow.classList.remove("flex");
+      }
+
+      if (infaq > 0 && summaryInfaqRow && summaryInfaqValue) {
+        summaryInfaqRow.classList.remove("hidden");
+        summaryInfaqRow.classList.add("flex");
+        summaryInfaqValue.textContent = formatRupiah(infaq);
+      } else if (summaryInfaqRow) {
+        summaryInfaqRow.classList.add("hidden");
+        summaryInfaqRow.classList.remove("flex");
+      }
+    };
+
+    // Infaq input
+    inputInfaq?.addEventListener("input", (e) => {
+      const target = e.target as HTMLInputElement;
+      const numeric = parseInt(target.value.replace(/[^0-9]/g, ""), 10) || 0;
+      infaq = numeric;
+      target.value = numeric > 0 ? numeric.toLocaleString("id-ID") : "";
+      updateSummary();
+    });
+
+    quickAmounts.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const amount = Number(btn.dataset.amount) || 0;
+        infaq = amount;
+        if (inputInfaq) inputInfaq.value = amount.toLocaleString("id-ID");
+        updateSummary();
+      });
+    });
+
+    // Voucher toggle
+    voucherToggle?.addEventListener("change", () => {
+      if (voucherToggle.checked) {
+        voucherWrapper?.classList.remove("hidden");
+      } else {
+        voucherWrapper?.classList.add("hidden");
+      }
+    });
+
+    // Apply discount
+    applyDiscountBtn?.addEventListener("click", async () => {
+      const code = inputDiscountCode?.value.trim() ?? "";
+      if (!code) {
+        showToast("Masukkan kode voucher", "error");
+        return;
+      }
+
+      applyDiscountBtn.disabled = true;
+      try {
+        const res = await fetch(`${apiUrl}/discount/code/${code}`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) throw new Error("invalid");
+        const json = await res.json();
+        const data = json?.data as DiscountData | undefined;
+        if (data?.discount) {
+          discountData = data;
+          const text =
+            data.type === "percentage"
+              ? `${data.name} sebesar ${Number(data.discount)}% sampai ${formatRupiah(
+                  Number(data.max_discount),
+                )} dengan minimal pembelian ${formatRupiah(Number(data.min_purchase))}`
+              : `${data.name} sebesar ${formatRupiah(Number(data.discount))}`;
+          if (discountAppliedText) discountAppliedText.textContent = text;
+          discountApplied?.classList.remove("hidden");
+          discountApplied?.classList.add("flex");
+          showToast("Diskon berhasil ditambahkan", "success");
+          updateSummary();
+        } else {
+          throw new Error("invalid");
+        }
+      } catch {
+        discountData = null;
+        discountApplied?.classList.add("hidden");
+        discountApplied?.classList.remove("flex");
+        showToast("Kode diskon tidak valid", "error");
+        updateSummary();
+      } finally {
+        applyDiscountBtn.disabled = false;
+      }
+    });
+
+    // ── Payment modal ─────────────────────────────────────────────────────────
+  openModalBtn?.addEventListener("click", () => {
+    (window as any).openPaymentModal?.();
+  });
+
+  window.addEventListener("payment:selected", (e: Event) => {
+    const { id, name, image, type } = (e as CustomEvent).detail;
+    paymentMethodId = id;
+    paymentType = type ?? "";
+    paymentSelected = true;
+
+    walletInfo?.classList.toggle("hidden", paymentType !== "wallet");
+    paymentImg.src = image ?? "";
+    paymentImg.classList.toggle("hidden", !image);
+    paymentNameEl.textContent = name ?? "Pilih metode pembayaran";
+    paymentNameEl.classList.remove("text-gray-400");
+    paymentNameEl.classList.add("text-gray-800");
+  });
+
+    // Submit
+    submitBtn?.addEventListener("click", async () => {
+      if (isSubmitting || !submitBtn) return;
+
+      const name = isLoggedInFlag ? userName : inputName?.value.trim() ?? "";
+      const phone = isLoggedInFlag ? userPhone : inputPhone?.value.trim() ?? "";
+      const email = isLoggedInFlag ? userEmail : inputEmail?.value.trim() ?? "";
+
+      if (!name || !phone) {
+        showToast("Nama dan nomor WhatsApp wajib diisi", "error");
+        return;
+      }
+
+      if (!isRegOnlyFlag && !paymentMethodId) {
+        showToast("Silakan pilih metode pembayaran terlebih dahulu", "error");
+        return;
+      }
+
+      if (discountData) {
+        const discAmount = computeDiscountAmount();
+        if (discAmount > totalPrice) {
+          showToast("Maaf, kode diskon melampaui total harga", "error");
+          return;
+        }
+      }
+
+      isSubmitting = true;
+      submitBtn.disabled = true;
+      if (submitBtnLabel) submitBtnLabel.textContent = "Memproses...";
+
+      const payload: Record<string, unknown> = {
+        type: "event",
+        items: [eventId],
+        qty: [qty],
+        total: [String(priceNum)],
+        payment_method_id: paymentMethodId,
+        name,
+        phone,
+        email,
+        source: "direct",
+        status: "Pending",
+        discount_code: discountData ? inputDiscountCode?.value.trim() ?? "" : "",
+        discount_id: discountData?.id ?? "",
+        ...(infaq > 0 ? { infaq } : {}),
+      };
+
+      const cleaned = Object.fromEntries(
+        Object.entries(payload).filter(
+          ([_, v]) => v !== "" && v !== null && v !== undefined,
+        ),
+      );
+
+      try {
+        const token = getToken();
+        const res = await fetch(`${apiUrl}/transactions/store`, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(cleaned),
+        });
+        if (!res.ok) throw new Error("transaction failed");
+        const json = await res.json();
+        const invoice = json?.data?.invoice;
+        if (!invoice) throw new Error("invoice missing");
+
+        sessionStorage.removeItem("eventFormData");
+        window.location.href = `/invoice/${invoice}`;
+      } catch (err) {
+        console.error(err);
+        showToast("Transaksi gagal, silakan coba lagi", "error");
+        isSubmitting = false;
+        submitBtn.disabled = false;
+        if (submitBtnLabel) submitBtnLabel.textContent = submitText;
+      }
+    });
+  }
+</script>

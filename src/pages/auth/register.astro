@@ -141,7 +141,7 @@ import { Image } from "astro:assets";
     import { isLoggedIn } from "@/lib/auth";
 
     if (isLoggedIn()) {
-      window.location.replace("/home");
+      window.location.replace("/");
     }
 
     const SITE_KEY = import.meta.env.PUBLIC_SITE_KEY_CAPTCHA;

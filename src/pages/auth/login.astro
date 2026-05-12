@@ -167,7 +167,7 @@ import { Image } from "astro:assets";
 
     if (isLoggedIn()) {
       const params = new URLSearchParams(window.location.search);
-      window.location.replace(params.get("from") ?? "/home");
+      window.location.replace(params.get("from") ?? "/");
     }
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -233,7 +233,7 @@ import { Image } from "astro:assets";
 
           setToken(token);
           const params = new URLSearchParams(window.location.search);
-          window.location.href = params.get("from") ?? "/home";
+          window.location.href = params.get("from") ?? "/";
         } catch (err: any) {
           showError(err.message ?? "Nomor Telepon atau Password Anda Salah");
         } finally {

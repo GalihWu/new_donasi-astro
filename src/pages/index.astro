@@ -1,42 +1,339 @@
 ---
 export const prerender = false;
 
-import MainLayout from "../layouts/MainLayout.astro";
+import Header from "@/components/layouts/Header.astro";
+import MainLayout from "@/layouts/MainLayout.astro";
+import { Image } from "astro:assets";
+
+const API_URL = import.meta.env.ASTRO_API_URL;
+
+const url = new URL(`${API_URL}/event`);
+url.searchParams.set("all",   "true");
+url.searchParams.set("limit", "6");
+url.searchParams.set("mode",  "pagination");
+url.searchParams.set("page",  "1");
+
+const res          = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+const data         = res.ok ? await res.json() : null;
+const initialEvents: any[] = (data?.data?.data ?? []).filter(
+  (e: any) => e.status !== "inactive"
+);
+const hasNextInit  = !!data?.data?.next_page_url;
 ---
 
-<MainLayout
-  title="Beranda"
-  description="Starter project Astro + Tailwind CSS yang ringan, bersih, dan siap dikembangkan lebih lanjut."
-  type="website"
->
-  <main class="container py-16">
-    <div class="max-w-2xl mx-auto text-center space-y-6">
-      <h1 class="text-5xl font-bold tracking-tight text-primary-600">
-        Astro + Tailwind CSS
-      </h1>
+<MainLayout title="Event" description="Temukan event pilihan dan perluas wawasanmu bersama komunitas Aksiberbagi.">
+  <Header type="onlyicon" />
 
-      <p class="text-lg text-gray-500">
-        Starter project yang ringan, bersih, dan siap dikembangkan lebih lanjut.
-      </p>
+  <!-- Hero -->
+  <section class="relative h-fit overflow-hidden mt-[65px] container">
+    <Image
+      width={240}
+      height={160}
+      src="/images/event/banner-event.webp"
+      alt="Event"
+      loading="eager"
+      decoding="async"
+      class="w-full h-full object-cover"
+    />
+    <div class="absolute inset-0 bg-gradient-to-t from-gray-50/45 via-black/10 to-transparent" />
+  </section>
 
-      <div class="flex items-center justify-center gap-4 pt-4">
-        <a
-          href="/home"
-          rel="noopener noreferrer"
-          class="inline-flex items-center px-6 py-3 rounded-lg bg-primary-600 text-white font-medium hover:bg-primary-700 transition-colors"
+  <!-- Main -->
+  <div
+    id="event-page"
+    data-api-url={API_URL}
+    class="min-h-screen bg-gray-50 max-w-[480px] mx-auto px-4 pb-12"
+  >
+
+    <!-- Search -->
+    <div class="sticky top-0 z-20 bg-gray-50 pt-4 pb-3">
+      <div class="flex items-center gap-2 bg-white rounded-2xl border border-gray-200 shadow-sm px-3 focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 transition-all">
+        <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <input
+          id="search-input"
+          type="search"
+          placeholder="Cari event yang kamu inginkan..."
+          class="flex-1 py-3 text-sm text-gray-700 bg-transparent outline-none placeholder:text-gray-300"
+        />
+        <button
+          id="btn-search"
+          type="button"
+          class="bg-primary-500 hover:bg-primary-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors duration-150 shrink-0"
         >
-          Donasi
-        </a>
-
-        <a
-          href="https://tailwindcss.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="inline-flex items-center px-6 py-3 rounded-lg border border-gray-300 text-gray-700 font-medium hover:border-primary-400 hover:text-primary-600 transition-colors"
-        >
-          Tailwind CSS
-        </a>
+          Cari
+        </button>
       </div>
     </div>
-  </main>
+
+    <!-- Section header -->
+    <div class="flex items-center justify-between mb-4 mt-1">
+      <div>
+        <h2 class="text-base font-semibold text-gray-900">Semua Event</h2>
+        <p id="search-label" class="text-xs text-gray-400 mt-0.5 hidden"></p>
+      </div>
+    </div>
+
+    <!-- Loading skeleton -->
+    <div id="skeleton" class="hidden grid grid-cols-2 gap-3">
+      {Array.from({ length: 4 }).map(() => (
+        <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
+          <div class="h-36 bg-gray-100" />
+          <div class="p-3 space-y-2">
+            <div class="h-3 bg-gray-100 rounded w-2/3" />
+            <div class="h-3 bg-gray-100 rounded" />
+            <div class="h-3 bg-gray-100 rounded w-4/5" />
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <!-- Event grid -->
+    <div id="event-grid" class="grid grid-cols-2 gap-3">
+      {initialEvents.map((event: any) => (
+        <a
+          href={`/event/${event.link}`}
+          class="group block bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-primary-200 transition-all duration-200 overflow-hidden"
+          data-status={event.status}
+        >
+          <!-- Image -->
+          <div class={`relative h-36 overflow-hidden ${event.status === "pass_event" ? "bg-gray-200" : "bg-gray-100"}`}>
+            <img
+              src={event.image}
+              alt={event.title}
+              loading="lazy"
+              decoding="async"
+              class={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${event.status === "pass_event" ? "grayscale opacity-60" : ""}`}
+            />
+            {event.status === "pass_event" && (
+              <div class="absolute top-2 right-2 bg-gray-800/80 backdrop-blur-sm text-gray-300 text-[9px] font-bold tracking-widest uppercase py-1 px-2.5 rounded-full">
+                Closed
+              </div>
+            )}
+          </div>
+
+          <!-- Content -->
+          <div class={`p-3 ${event.status === "pass_event" ? "bg-gray-50" : "bg-white"}`}>
+            <!-- Meta -->
+            <div class="flex items-center gap-1.5 text-[10px] text-gray-400 mb-2">
+              {event.location
+                ? (
+                  <>
+                    <svg class="w-3 h-3 text-primary-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    <span class="truncate">{event.location}</span>
+                  </>
+                ) : (
+                  <>
+                    <svg class="w-3 h-3 text-primary-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/>
+                    </svg>
+                    <span class="truncate">{event.type?.name} · {event.mode}</span>
+                  </>
+                )
+              }
+            </div>
+
+            <!-- Title -->
+            <h3 class="text-xs font-semibold text-gray-800 leading-snug line-clamp-2 group-hover:text-primary-600 transition-colors duration-200 mb-2.5">
+              {event.title}
+            </h3>
+
+            <!-- Mitra -->
+            <div class="flex items-center gap-2 pt-2 border-t border-gray-100">
+              <img
+                src={event.mitra?.image}
+                alt={event.mitra?.name}
+                width="20" height="20"
+                class="w-5 h-5 rounded-full object-cover ring-2 ring-primary-100 shrink-0"
+              />
+              <span class="text-[10px] text-gray-400 truncate">{event.mitra?.name}</span>
+            </div>
+          </div>
+        </a>
+      ))}
+    </div>
+
+    <!-- Empty state -->
+    <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 text-center">
+      <div class="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
+        <svg class="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+      </div>
+      <p class="text-sm font-semibold text-gray-600">Belum ada event</p>
+      <p id="empty-desc" class="text-xs text-gray-400 mt-1 max-w-[200px] leading-relaxed"></p>
+      <button id="btn-clear" class="hidden mt-4 text-primary-500 text-xs font-semibold underline underline-offset-2">
+        Hapus pencarian
+      </button>
+    </div>
+
+    <!-- Load more -->
+    <div id="load-more-wrap" class={`flex justify-center mt-8 ${hasNextInit ? "" : "hidden"}`}>
+      <button
+        id="btn-load-more"
+        type="button"
+        class="flex items-center gap-2 bg-white border border-gray-200 hover:border-primary-400 hover:bg-primary-50 text-gray-600 hover:text-primary-600 font-semibold text-xs px-6 py-3 rounded-2xl shadow-sm transition-all duration-200"
+      >
+        Tampilkan Lebih Banyak
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+        </svg>
+      </button>
+    </div>
+
+  </div>
 </MainLayout>
+
+<script>
+  const page    = document.getElementById("event-page") as HTMLElement;
+  const API_URL = page.dataset.apiUrl ?? "";
+
+  const grid         = document.getElementById("event-grid")     as HTMLElement;
+  const skeleton     = document.getElementById("skeleton")       as HTMLElement;
+  const emptyState   = document.getElementById("empty-state")    as HTMLElement;
+  const emptyDesc    = document.getElementById("empty-desc")     as HTMLElement;
+  const btnClear     = document.getElementById("btn-clear")      as HTMLButtonElement;
+  const loadMoreWrap = document.getElementById("load-more-wrap") as HTMLElement;
+  const btnLoadMore  = document.getElementById("btn-load-more")  as HTMLButtonElement;
+  const searchInput  = document.getElementById("search-input")   as HTMLInputElement;
+  const btnSearch    = document.getElementById("btn-search")     as HTMLButtonElement;
+  const searchLabel  = document.getElementById("search-label")   as HTMLElement;
+  const eventCount   = document.getElementById("event-count")    as HTMLElement;
+
+  let currentPage  = 1;
+  let currentQuery = "";
+  let isFetching   = false;
+  let hasNext      = loadMoreWrap.classList.contains("hidden") ? false : true;
+  let activeCount  = 0;
+
+  // ── Card template ─────────────────────────────────────────────────────────
+  function renderCard(event: any): string {
+    const isPast    = event.status === "pass_event";
+    const imgClass  = `w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${isPast ? "grayscale opacity-60" : ""}`;
+    const closedBadge = isPast
+      ? `<div class="absolute top-2 right-2 bg-gray-800/80 backdrop-blur-sm text-gray-300 text-[9px] font-bold tracking-widest uppercase py-1 px-2.5 rounded-full">Closed</div>`
+      : "";
+
+    const metaIcon = event.location
+      ? `<svg class="w-3 h-3 text-primary-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span class="truncate">${event.location}</span>`
+      : `<svg class="w-3 h-3 text-primary-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/></svg><span class="truncate">${event.type?.name ?? ""} · ${event.mode ?? ""}</span>`;
+
+    return `
+      <a href="/event/${event.link}"
+        class="group block bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-primary-200 transition-all duration-200 overflow-hidden">
+        <div class="relative h-36 overflow-hidden ${isPast ? "bg-gray-200" : "bg-gray-100"}">
+          <img src="${event.image}" alt="${event.title}" loading="lazy" decoding="async" class="${imgClass}" />
+          ${closedBadge}
+        </div>
+        <div class="p-3 ${isPast ? "bg-gray-50" : "bg-white"}">
+          <div class="flex items-center gap-1.5 text-[10px] text-gray-400 mb-2">${metaIcon}</div>
+          <h3 class="text-xs font-semibold text-gray-800 leading-snug line-clamp-2 group-hover:text-primary-600 transition-colors duration-200 mb-2.5">
+            ${event.title}
+          </h3>
+          <div class="flex items-center gap-2 pt-2 border-t border-gray-100">
+            <img src="${event.mitra?.image ?? ""}" alt="${event.mitra?.name ?? ""}" width="20" height="20"
+              class="w-5 h-5 rounded-full object-cover ring-2 ring-primary-100 shrink-0" />
+            <span class="text-[10px] text-gray-400 truncate">${event.mitra?.name ?? ""}</span>
+          </div>
+        </div>
+      </a>`;
+  }
+
+  // ── Fetch ─────────────────────────────────────────────────────────────────
+  async function fetchEvents(page: number, query: string, append = false) {
+    if (isFetching) return;
+    isFetching = true;
+
+    if (!append) {
+      grid.innerHTML = "";
+      skeleton.classList.remove("hidden");
+      emptyState.classList.add("hidden");
+      loadMoreWrap.classList.add("hidden");
+    } else {
+      btnLoadMore.disabled = true;
+      btnLoadMore.innerHTML = `<span class="w-4 h-4 border-2 border-gray-300 border-t-primary-500 rounded-full animate-spin"></span> Memuat...`;
+    }
+
+    try {
+      const url = new URL(`${API_URL}/event`);
+      url.searchParams.set("all",   "true");
+      url.searchParams.set("limit", "6");
+      url.searchParams.set("mode",  "pagination");
+      url.searchParams.set("page",  String(page));
+      if (query) url.searchParams.set("search", query);
+
+      const res  = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+      const data = res.ok ? await res.json() : null;
+
+      const events: any[]  = (data?.data?.data ?? []).filter((e: any) => e.status !== "inactive");
+      hasNext = !!data?.data?.next_page_url;
+
+      skeleton.classList.add("hidden");
+
+      if (!append) {
+        activeCount = events.filter((e: any) => e.status !== "pass_event").length;
+      } else {
+        activeCount += events.filter((e: any) => e.status !== "pass_event").length;
+      }
+
+      if (events.length === 0 && !append) {
+        emptyState.classList.remove("hidden");
+        emptyDesc.textContent = query
+          ? `Tidak ada event yang cocok dengan "${query}"`
+          : "Belum ada event yang tersedia saat ini";
+        btnClear.classList.toggle("hidden", !query);
+        eventCount.textContent = "0 event";
+      } else {
+        grid.insertAdjacentHTML("beforeend", events.map(renderCard).join(""));
+        eventCount.textContent = `${activeCount} event`;
+      }
+
+      loadMoreWrap.classList.toggle("hidden", !hasNext);
+
+    } finally {
+      isFetching = false;
+      btnLoadMore.disabled = false;
+      btnLoadMore.innerHTML = `Tampilkan Lebih Banyak <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>`;
+    }
+  }
+
+  // ── Search ────────────────────────────────────────────────────────────────
+  function doSearch() {
+    const q = searchInput.value.trim();
+    currentQuery = q;
+    currentPage  = 1;
+
+    if (q) {
+      searchLabel.textContent = `Hasil pencarian untuk "${q}"`;
+      searchLabel.classList.remove("hidden");
+    } else {
+      searchLabel.classList.add("hidden");
+    }
+
+    fetchEvents(1, q, false);
+  }
+
+  btnSearch.addEventListener("click", doSearch);
+  searchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doSearch();
+  });
+
+  // ── Load more ─────────────────────────────────────────────────────────────
+  btnLoadMore.addEventListener("click", () => {
+    currentPage++;
+    fetchEvents(currentPage, currentQuery, true);
+  });
+
+  // ── Clear search ──────────────────────────────────────────────────────────
+  btnClear.addEventListener("click", () => {
+    searchInput.value = "";
+    currentQuery = "";
+    currentPage  = 1;
+    searchLabel.classList.add("hidden");
+    fetchEvents(1, "", false);
+  });
+</script>
